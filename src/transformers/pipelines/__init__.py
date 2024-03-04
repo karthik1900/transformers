@@ -88,7 +88,7 @@ from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
-
+from ..utils.inferless_utils import is_inferless_applicable, upload_model_to_inferless, get_model_files
 
 if is_tf_available():
     import tensorflow as tf
@@ -745,6 +745,10 @@ def pipeline(
         "_commit_hash": commit_hash,
     }
 
+    if is_inferless_applicable(model):
+        upload_model_to_inferless(model)
+        model = get_model_files(model)
+
     if task is None and model is None:
         raise RuntimeError(
             "Impossible to instantiate a pipeline without either a task or a model "
@@ -849,6 +853,7 @@ def pipeline(
                     " set the option `trust_remote_code=True` to remove this error."
                 )
             class_ref = targeted_task["impl"]
+            # TODO should we support custom tasks
             pipeline_class = get_class_from_dynamic_module(
                 class_ref,
                 model,

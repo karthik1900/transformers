@@ -96,6 +96,8 @@ from .utils.import_utils import (
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
 )
+from .utils.inferless_utils import is_inferless_applicable, get_metadata_single_file, get_state_dict_single_file, \
+    get_torch_dtype_sharded
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 
@@ -3281,8 +3283,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             and isinstance(resolved_archive_file, str)
             and resolved_archive_file.endswith(".safetensors")
         ):
-            with safe_open(resolved_archive_file, framework="pt") as f:
-                metadata = f.metadata()
+            if is_inferless_applicable(pretrained_model_name_or_path):
+                metadata = get_metadata_single_file(pretrained_model_name_or_path)
+            else:
+                with safe_open(resolved_archive_file, framework="pt") as f:
+                    metadata = f.metadata()
 
             if metadata.get("format") == "pt":
                 pass
@@ -3303,7 +3308,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(resolved_archive_file)
+                if is_inferless_applicable(pretrained_model_name_or_path):
+                    state_dict = get_state_dict_single_file(pretrained_model_name_or_path)
+                else:
+                    state_dict = load_state_dict(resolved_archive_file)
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -3324,8 +3332,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             elif not is_sharded:
                                 torch_dtype = get_state_dict_dtype(state_dict)
                             else:
-                                one_state_dict = load_state_dict(resolved_archive_file[0])
-                                torch_dtype = get_state_dict_dtype(one_state_dict)
+                                if is_inferless_applicable(pretrained_model_name_or_path):
+                                    torch_dtype = get_torch_dtype_sharded(pretrained_model_name_or_path, resolved_archive_file)
+                                else:
+                                    one_state_dict = load_state_dict(resolved_archive_file[0])
+                                    torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
                                 "Since the `torch_dtype` attribute can't be found in model's config object, "
@@ -3900,7 +3911,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file)
+                if is_inferless_applicable(pretrained_model_name_or_path):
+                    state_dict = get_state_dict_single_file(pretrained_model_name_or_path, shard_file)
+                else:
+                    state_dict = load_state_dict(shard_file)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
