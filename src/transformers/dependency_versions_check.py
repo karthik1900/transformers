@@ -35,6 +35,7 @@ pkgs_to_check_at_runtime = [
     "safetensors",
     "accelerate",
     "pyyaml",
+    "boto3"
 ]
 
 for pkg in pkgs_to_check_at_runtime:
